@@ -1,0 +1,122 @@
+---
+title: "Assessing Significance"
+author: "Vanessa Sochat"
+output: html_document
+---
+
+As we discussed in [statistical distributions of brain maps]("/statistics.statistics-brain-maps"), it is common practice to start with an unthresholded brain map, and determine which of the values are "statistically significant."  That's a pretty loaded term - let's talk about what that means first.
+
+## Statistical Significance
+
+### The Null Hypothesis
+Let's talk a little bit about null hypotheses.  The workflow of the researcher is to use statistics to be convinced of observing some difference between groups, or some very high value, with a very low probability that the observation is due to chance.  For example, when we look at a standard normal distribution of values, we interpret the area under the curve as probability.  If we observe a value at Z=0, we could calculate a little slice of the area and find that observing the mean is pretty darn likely.  The choice of the "null distribution" varies depending on the analysis, but broadly a null distribution must be carefully chosen so it represents what we would see given random chance.  If we set up an appropriate null distribution, and compare some sample mean to it, a value near the null distribution's mean would be pretty strong evidence that there is actually no difference.  In this case, we would fail to reject the null hypothesis.  If our sample mean was out in tinbuck two, relative to the null distribution (perhaps 4 standard deviations away), that would be strong evidence that there is an actual difference, and we reject the null hypothesis. Whatever our "opposite" of the null hypothesis is, we call that the "alternative" hypothesis.
+
+### The P-Value
+If you remember from introductory statistics class when you learned about the standard normal distribution, we can find 68% of values within +/- one standard deviation of the mean (Z scores between -1 and +1), 95% of values between -2 and +2 standard deviations, and 99.7% of values between -3 and +3 standard deviations. A p-value represents how willing you are to risk your result being a false positive, or rejecting the null hypotheses (for example, saying there IS a significant different between groups) when there is not.  It is the lowest alpha level that we could use for our test and still reject the null hypothesis given our sample.  You also have to think about if you want a one or two-tailed test.  A one tailed test means that we hypothesize that our sample is greater than the mean, and a two-tailed test means it could go either way.
+
+## A motivating example
+*calculating p-values from a Z-score map*
+If we have a single Z Score Map it's usually because we have tested some hypothesis at every single voxel, and converted to a Z score so we can 1) standardize to compare to other maps, and 2) find significant results! How do we do that?   
+
+Let's start with a simple, unthresholded Z score map.  It doesn't even matter where it came from, or what it represents, biologically.
+
+```{r}
+library(fslr)
+options(fsl.path="/usr/share/fsl/5.0")
+have.fsl()
+
+# Re-read in our Z score image, to be consistent with fslr
+mr = readNIfTI("mr/16_zstat17_1.nii")
+par(mfrow=c(1,1))
+orthographic(mr)
+
+dim(mr)
+hist(mr,main="Unhresholded Z Score Image",col=sample(colours(),1))
+```
+
+We see a ridiculous number of 0 voxels hiding the interesting part of the distribution from us.  Why is that? We haven't masked the brain to eliminate the "non brain" voxels.  There are two ways to go about this: the "lazy man it's ok for this tutorial way," and the "correct and right" way.  For an unthresholded map of this type, it's pretty unlikely to have a value of exactly 0 in the brain space.  So if we threshold out the 0 values, we are (sort of) applying a brain mask to only include the brain voxels.  However, you could easily see a map that has voxels (xyz coordinates) within a brain mask that are 0.  And so, the correct way to go about this is to apply a brain mask, and then visualize the voxels within the mask.  For this tutorial, we are just going to eliminate the zero voxels.  The correct steps would be to register the image to a standard template, and then use the template brain mask to eliminate the non zero voxels.
+
+```{r}
+data_nozero = mr
+
+# Pull out the nonzero values - this will be a vector
+data_nozero = data_nozero[which(data_nozero != 0)]
+
+# We can look at the length to see how many non zero values there are
+length(data_nozero)
+
+hist(data_nozero,main="Unhresholded Z Score Image, No Zeros",col=sample(colours(),1),breaks=100)
+```
+
+We see just under 40K values, and the distribution looks relatively balanced. I like to increase the number of breaks to get a better sense of the shape - you could also calculate a gaussian density:
+
+```{r}
+dens = density(data_nozero,kernel="gaussian")
+plot(dens,main="Unthresholded Z Score Image Density")
+polygon(dens, col = "tomato")
+lines(dens, col = "red",lwd=1)
+```
+
+### Is it normal?
+In the above, we are "visually" assessing for normality.  In the case of smaller data, we could use the [shapiro-wilk test](http://en.wikipedia.org/wiki/Shapiro%E2%80%93Wilk_test) (shapiro.test) to see if our data is normally distributed before we assess for significance using a standard normal as our null distribution.  Since this is a larger dataset, we can use (kolmogorov-smirnov).
+
+```{r}
+ks.test(x=mr,y="pnorm",alternative = "two.sided" , exact = NULL)
+```
+
+The p-value is less than 0.05, so (I think) we can say that it is normally distributed. I'm pretty terrible at statistics, actually, so I need to come back to this and read about the different tests.
+
+### What are the P-Values?
+Now that we are (somewhat) convinced that we can use the standard normal as our null, we need to know what Z score we can threshold the map at to only leave the voxels that are "significant" based on some p-value threshold (alpha).  Let's, for each Z Score in the map, calculate it's "p-value," or the area under the curve to the right of the Z score, representing the proportion of the distribution (or probability). Then let's make a p-value brain map, where each voxel has its associated p-value.
+
+```{r}
+pvalues = pnorm(data_nozero, lower.tail=FALSE)      
+hist(pvalues,main="Here are the pvalues!",col=sample(colours(),1))
+
+# Make an empty image the same size as the original
+pvalue_map = array(dim=dim(mr))
+dim(pvalue_map)
+
+# We can use the same indexing to return the values to their spatial locations
+# Be careful doing this if anything has changed that would return a different index
+pvalue_map[which(mr!=0)] = pvalues
+orthographic(pvalue_map)
+```
+
+Let's try thresholding to only reveal the p-values under some threshold (0.05!)
+
+```{r}
+pvalue_map_thresh = pvalue_map
+pvalue_map_thresh[pvalue_map_thresh>0.05] = 0
+orthographic(pvalue_map_thresh)
+```
+
+Many analysis suites also take "clusters" into account - meaning that we might set an "extent threshold" to only include groups of voxels that meet a minimum size requirement.  You could imagine that a single, lone voxel with a significant p-value is probably not very convincing, but a large group of them is.
+
+### Correcting for Multiple Comparisons
+But wait a minute, didn't we perform some statistical test at every voxel, meaning that we are inflating the chance of a false positive?  Yes, we need to correct for multiple comparisons. Let's do this, using FDR: 
+
+```{r}
+qvalues = p.adjust(pvalues,method="fdr")
+par(mfrow=c(1,2))
+hist(pvalues,main="Here are the p-values!",col=sample(colours(),1))
+hist(qvalues,main="Here are the q-values!",col=sample(colours(),1))
+```
+
+Uhoh, look at that x range - the minimum is a very large number.
+
+```{r}
+min(qvalues)
+```
+
+Well, that's that! We have "significant results" for an uncorrected map, but not for a corrected map.
+
+## Summary
+We use p-values to assess for significance to determine if we can accept or reject the null hypothesis, which says that our observed mean is no different than our null distribution.  I want to stress that this is not a "formulaic" process in the sense that you can do the same thing every time.  Before partaking in an analysis, it's important to think about the following:
+
+ - What am I trying to test? (What are the null and alternative hypotheses)
+ - What is/are appropriate null distribution(s)?
+ - How is my data distributed? Can I confirm this?
+ - Do I need to correct for multiple comparisons?
+ 
+I chose to use R for this example, because it provides many useful functions for quickly calculating p-values, densities, (and even quantiles and random variables!) for a distribution of interest (for standard nornal, we were using dnorm, pnorm, and there is also pnorm and rnorm).

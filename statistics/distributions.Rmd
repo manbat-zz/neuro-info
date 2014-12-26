@@ -1,0 +1,126 @@
+---
+title: "Brain Map Distributions"
+author: "Vanessa Sochat"
+output: html_document
+---
+
+
+## The Z Score Map
+
+### What is a Z Score?
+The purpose of the Z score is to "standardize" distributions so that each has a mean of 0, and standard deviation as 1, so we can then make comparisons.  
+
+*Standard Score, the "Z-Score":* A way to make a comparison between values on two different normal curves by converting the values to the number of standard deviations above or below the mean. 
+
+### How do we calculate a Z Score?
+It follows logically, then, to calculate a Z score we are going to subtract the mean, and then divide by the standard error of the mean.  Let's create a normally distributed sample and convert it to Z scores:
+
+```{r}
+par(mfrow=c(1,2))
+distribution = rnorm(1000,mean=120,sd=10)
+hist(distribution,main="Normal, Mean 120, sd 10",col="tomato")
+
+# Convert to Z score
+
+# Standard error of the mean - this is a sample
+std = function(x) sd(x)/sqrt(length(x))
+Zdistribution = (distribution - mean(distribution)) / std(distribution)
+hist(Zdistribution,main="Standard Normal (Z), Mean 0, sd 1",col="tomato")
+
+```
+
+What you see above is that the distributions are exactly the same *except* for the scale.  The tomato on the right has mean 0, and standard deviation 1, while the other does not.  This should hammer home the point that when we When we convert distributions to Z scores, we are merely re-representing it in a normalized form so that we can compare two distributions with different means and standard deviations.
+
+### What do the values mean in the context of brain imaging?
+A positive number means we are above the mean, and a negative number means that we are below the mean.  Zero indicates being equal to the mean.  This is incredibly important in the context of brain imaging - a negative value does not indicate any kind of "deactivation" or "inverse relationship," it just indicates that the original value in the map, before it was standardized, was below the mean.  We cannot say anything about the sign or original value itself, we can only infer about its relative place in the distribution.  
+
+### Z Score Maps in Brain Imaging Software
+Where do we see Z score maps popping out from brain imaging software? The first that comes to mind is with the [FSL software](http://fsl.fmrib.ox.ac.uk/fsl/fsl-4.1.9/feat5/glm.html). When you do [independent component analysis](http://en.wikipedia.org/wiki/Independent_component_analysis) ([vbmis](http://www.vbmis.com/learn/independent-component-analysis-ica/) to extract independent signals ("functional brain networks") from resting BOLD fMRI data, the output is thresholded and unthresholded Z score maps.  For example, a thresholded Z Score map, named "thresh_zstat_1.nii.gz." means that we have taken the first component, and applied a threshold to the Z score to only include the top/bottom 5% of values. 
+
+## Questions of Similarity we ask of Z Score Maps
+
+### The Unthresholded Z Score Map
+Let's now pretend that we just used FSL to produce some group-derived Z-score map with unthresholded values in an independent component analysis (ICA). Many researchers interpret these maps as being represenative of an individual's or group-derived "functional network," such as the [default mode network](http://en.wikipedia.org/wiki/Default_mode_network).  Thresholding the map to include some top quantile of values we could interpret as spatial locations with the "strongest connectivity" within the network, but for now, we aren't going to threshold.  We are going to leave the map as-is. If we believe that this brain map is representative of a whole brain pattern of some functional signal, we might ask the following "similarity" questions:
+
+ - Has any one else found this result?
+ - What is the likelihood of this result being a functional network?
+ - What other brain maps (in some database) are like mine?
+ - Is there a subset of the map that is similar?
+ - Do any regions within the map have similar connectivity?
+ 
+We will start to answer some of these questions in this statistics section as we learn about similarity metrics.  For now, let's talk about what happens when we threshold this map. 
+
+### The Thresholded Z Score Map
+Humans have a natural desire to see things that make sense.  When we look at our unthresholded map:
+
+```{r}
+library(fslr)
+options(fsl.path="/usr/share/fsl/5.0")
+have.fsl()
+
+# Re-read in our Z score image, to be consistent with fslr
+mr = readNIfTI("mr/16_zstat17_1.nii")
+orthographic(mr)
+min(mr)
+max(mr)
+```
+
+we see that it has negative and positive values. We can tell from the outline that the map has been masked to include only gray matter, but it doesn't "light up" any picture of the brain in particular (if you've ever seen an article in a Science magazine or journal, people like to see a gray standard anatomical image with a hot orange spot "lit up" to represent some significant result).  Raw data doesn't give us that.  So in the case of this independent component analysis result, researchers do something that is a little trivial, but produces a "more pleasing" spatial map.  They threshold to include only the "strongest" values, which may be the top 2.5% and bottom 2.5% of values for a total of 5% of the distribution. Let's see what that looks like:
+
+```{r}
+thresh_zstat = array(0,dim=dim(mr))
+
+# Calculate the Z score threshold
+zthresh = qnorm(0.05,mean=0,sd=1,lower.tail=FALSE)
+thresh_zstat[mr>=zthresh] = mr[mr>=zthresh]
+thresh_zstat[mr<=-zthresh] = mr[mr<=-zthresh]
+orthographic(thresh_zstat)
+```
+
+Kind of hard to see, so let's split the positive and negative
+
+```{r}
+thresh_zstat_pos = thresh_zstat
+thresh_zstat_neg = thresh_zstat
+
+thresh_zstat_neg[thresh_zstat_neg > 0] = 0
+thresh_zstat_pos[thresh_zstat_pos < 0] = 0
+
+# Get rid of negative sign so it doesn't look funny
+thresh_zstat_neg = thresh_zstat_neg * -1
+
+orthographic(thresh_zstat_pos)
+orthographic(thresh_zstat_neg)
+```
+
+There you have it - "pretty" results because we have essentially filtered out everything in the middle.  Showing this in a publication would be "prettier," but think of all the data that is lost.  For the positive thresholded map, the researcher will likely interpret the positive values as the spatial locations having the "strongest connectivity" for the "network." Some would even "define" the map as being a functional network, because it looks like one.  I want to caution you in starting any kind of analysis or image comparison using already thresholded maps.  There is no reason that you should need to use a thresholded map to find similar Z-Score maps.  To use a thresholded map as some kind of "functional network template" comes with it many biases and assumptions that should not be the starting point of such an analysis.  When this choice is made, it comes with the limitation that the definition of the "network" is rather arbitrary - we could make the threshold more stringent to reduce the map extent, or loosen the threshold to make it more robust.
+
+Our researcher cannot make the same interpretation for the "strongest negative values" - if you remember, negative only means that the values are some number of standard deviations below the mean, and is not indicative of any kind of inverse relationship or "negative" connectivity.  
+
+Given these cautions, the questions that the researchers (should) be asking about these maps are:
+
+ - How and why were they thresholded?
+ - Can I get the raw data?
+
+The crux of the above is "Are there situations for which image comparison using these maps is a reasonable thing to do?" We will think about this in the following few chapters.
+ 
+### Questions researchers are asking, but they don't know it
+If I walked into a group of neuroimaging scientists and asked them about how they compare images, I would get answers similar to what I discussed above.  However, there are underlying questions that would be important to answer, but so obvious that they are forgotten:
+
+- How is my data distributed?
+- Are there outliers? What do they mean?
+- Are there any "nan" or "na" values, and where did they come from?
+- Did the analysis where this came from introduce any bias in what I am seeing?
+
+In the visualization sections, we will talk about strategies for bringing these questions out from the data to the attention of the researcher.  If he or she does absolutely no visualization and makes assumptions about the above, it can lead to poor quality work.  In fact, I think lots of people plug their data into algorithms without properly exporing and visualizing it, it makes me uneasy, and is one of the motivating forces for why I want to create tools for visualization. The basic questions above are going to motivate some of our pairwise comparison metrics in the next section.  For now, let's take a look at other distributions.
+
+
+## The T Distribution
+*still being written*
+The two sample T-test, or paired two sample T-test, is the powerhouse of many common neuroimaging analyses.  We have two groups of interest, and we want to know if the mean value of each voxel (that is a proxy for a structural or functional element, or something else entirely) is significantly different between two groups.  This is where the T-test comes in, and the result of the T-test is going to be, at each voxel, XXX
+
+## The F Distribution
+
+
+## A P Value Map
+It sometimes makes sense to communicate a result by simply assigning each voxel a p-value to indicate the significance of some test.  When you do this, it is important to accurately communicate the correction that was (or was not) used.  If you did not correct for multiple comparisons, then someone viewing the p-values in your map may need to do that.
