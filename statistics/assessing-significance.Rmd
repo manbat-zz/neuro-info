@@ -4,15 +4,18 @@ author: "Vanessa Sochat"
 output: html_document
 ---
 
-As we discussed in [statistical distributions of brain maps]("/statistics.statistics-brain-maps"), it is common practice to start with an unthresholded brain map, and determine which of the values are "statistically significant."  That's a pretty loaded term - let's talk about what that means first.
+As we discussed in [statistical distributions of brain maps]("http://neuro-info.herokuapp.com/statistics.statistics-distributions"), it is common practice to start with an unthresholded brain map, and determine which of the values are "statistically significant."  That's a pretty loaded term - let's talk about what that means first.
 
 ## Statistical Significance
 
 ### The Null Hypothesis
-Let's talk a little bit about null hypotheses.  The workflow of the researcher is to use statistics to be convinced of observing some difference between groups, or some very high value, with a very low probability that the observation is due to chance.  For example, when we look at a standard normal distribution of values, we interpret the area under the curve as probability.  If we observe a value at Z=0, we could calculate a little slice of the area and find that observing the mean is pretty darn likely.  The choice of the "null distribution" varies depending on the analysis, but broadly a null distribution must be carefully chosen so it represents what we would see given random chance.  If we set up an appropriate null distribution, and compare some sample mean to it, a value near the null distribution's mean would be pretty strong evidence that there is actually no difference.  In this case, we would fail to reject the null hypothesis.  If our sample mean was out in tinbuck two, relative to the null distribution (perhaps 4 standard deviations away), that would be strong evidence that there is an actual difference, and we reject the null hypothesis. Whatever our "opposite" of the null hypothesis is, we call that the "alternative" hypothesis.
+Let's talk a little bit about null hypotheses.  It is common to think that the null hypothesis is always the assumption that the data have a random distribution, but as my colleague Maude taught me, it depends on the test that you're using.  Usually, however, it translates to "nothing is different", or "the distribution, or mean, or something are equal."  It is very important to check with the test that you are using.  In the context of brain imaging analyses, we do a lot of tests that *do* use this simple definition of the null. Let's talk about that.
+
+The workflow of the researcher is to use statistics to be convinced of observing some difference between groups, or some very high value, with a very low probability that the observation is due to chance.  For example, when we look at a standard normal distribution of values, we interpret the area under the curve as probability.  If we observe a value at Z=0 and we are interested in the probability of a mean greater than 0, we could calculate the area under the curve from 0 to the right tail, and find that it's pretty darn likely.  The choice of the "null distribution" varies depending on the analysis, and in this case we are choosing a null distribution that represents what we would see given random chance.  If we set up this null distribution and compare some sample mean to it, a value near the null distribution's mean would be pretty strong evidence that there is actually no difference.  In this case, we would fail to reject the null hypothesis.  If our sample mean was out in tinbuck two, relative to the null distribution (perhaps 4 standard deviations away), that would be strong evidence that there is an actual difference, and we reject the null hypothesis. Whatever our "opposite" of the null hypothesis is, we call that the "alternative" hypothesis.
 
 ### The P-Value
-If you remember from introductory statistics class when you learned about the standard normal distribution, we can find 68% of values within +/- one standard deviation of the mean (Z scores between -1 and +1), 95% of values between -2 and +2 standard deviations, and 99.7% of values between -3 and +3 standard deviations. A p-value represents how willing you are to risk your result being a false positive, or rejecting the null hypotheses (for example, saying there IS a significant different between groups) when there is not.  It is the lowest alpha level that we could use for our test and still reject the null hypothesis given our sample.  You also have to think about if you want a one or two-tailed test.  A one tailed test means that we hypothesize that our sample is greater than the mean, and a two-tailed test means it could go either way.
+A p-value is the probability of getting at least the same value of the test if the null hypothesis is true.  If you remember from introductory statistics class when you learned about the standard normal distribution, we can find 68% of values within +/- one standard deviation of the mean (Z scores between -1 and +1), 95% of values between -2 and +2 standard deviations, and 99.7% of values between -3 and +3 standard deviations. A p-value represents how willing you are to risk your result being a false positive, or rejecting the null hypotheses (for example, saying there IS a significant different between groups) when there is not.  It is the lowest alpha level that we could use for our test and still reject the null hypothesis given our sample.  You also have to think about if you want a one or two-tailed test.  A one tailed test means that we hypothesize that our sample is greater than the mean, and a two-tailed test means it could go either way.
+
 
 ## A motivating example
 *calculating p-values from a Z-score map*
@@ -58,13 +61,15 @@ lines(dens, col = "red",lwd=1)
 ```
 
 ### Is it normal?
-In the above, we are "visually" assessing for normality.  In the case of smaller data, we could use the [shapiro-wilk test](http://en.wikipedia.org/wiki/Shapiro%E2%80%93Wilk_test) (shapiro.test) to see if our data is normally distributed before we assess for significance using a standard normal as our null distribution.  Since this is a larger dataset, we can use (kolmogorov-smirnov).
+In the above, we are "visually" assessing for normality.  In the case of smaller data, we could use the [shapiro-wilk test](http://en.wikipedia.org/wiki/Shapiro%E2%80%93Wilk_test) (shapiro.test) to see if our data is normally distributed before we assess for significance using a standard normal as our null distribution.  Since this is a larger dataset, we can use ks, (kolmogorov-smirnov). Shapiro and ks do not test the same thing: shapiro is more restrictive, making a comparison based on expectation and the variance/covariance matrix, and
+ks tests if two distributions are the same: take a look at the R command below, and you will see the second argument, y, is generating a random normal distribution with which we can compare our data (mr).
 
 ```{r}
 ks.test(x=mr,y="pnorm",alternative = "two.sided" , exact = NULL)
 ```
 
-The p-value is less than 0.05, so (I think) we can say that it is normally distributed. I'm pretty terrible at statistics, actually, so I need to come back to this and read about the different tests.
+The p-value is less than 0.05, so (I think) we can say that it is normally distributed. I'm pretty terrible at statistics, actually, so I need to come back to this and read about the different tests.  
+
 
 ### What are the P-Values?
 Now that we are (somewhat) convinced that we can use the standard normal as our null, we need to know what Z score we can threshold the map at to only leave the voxels that are "significant" based on some p-value threshold (alpha).  Let's, for each Z Score in the map, calculate it's "p-value," or the area under the curve to the right of the Z score, representing the proportion of the distribution (or probability). Then let's make a p-value brain map, where each voxel has its associated p-value.
@@ -118,5 +123,6 @@ We use p-values to assess for significance to determine if we can accept or reje
  - What is/are appropriate null distribution(s)?
  - How is my data distributed? Can I confirm this?
  - Do I need to correct for multiple comparisons?
+ - What are the conditions of the test (for example, should variances be equal?)
  
-I chose to use R for this example, because it provides many useful functions for quickly calculating p-values, densities, (and even quantiles and random variables!) for a distribution of interest (for standard nornal, we were using dnorm, pnorm, and there is also pnorm and rnorm).
+I chose to use R for this example, because it provides many useful functions for quickly calculating p-values, densities, (and even quantiles and random variables!) for a distribution of interest (for standard nornal, we were using dnorm, pnorm, and there is also pnorm and rnorm). Thank you to Maude David, my diabolical colleague, for her feedback on this post!
