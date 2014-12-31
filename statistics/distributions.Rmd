@@ -18,18 +18,19 @@ It follows logically, then, to calculate a Z score we are going to subtract the 
 ```{r}
 par(mfrow=c(1,2))
 distribution = rnorm(1000,mean=120,sd=10)
-hist(distribution,main="Normal, Mean 120, sd 10",col="tomato")
+hist(distribution,main="Normal",col="tomato",breaks=10)
 
 # Convert to Z score
 
-# Standard error of the mean - this is a sample
+# Note that if you are doing a sample, divide by standard error of the mean:
 std = function(x) sd(x)/sqrt(length(x))
-Zdistribution = (distribution - mean(distribution)) / std(distribution)
-hist(Zdistribution,main="Standard Normal (Z), Mean 0, sd 1",col="tomato")
 
+# Here we divide by standard deviation
+Zdistribution = (distribution - mean(distribution)) / sd(distribution)
+hist(Zdistribution,main="Standard Normal (Z)",col="tomato",breaks=10)
 ```
 
-What you see above is that the distributions are exactly the same *except* for the scale.  The tomato on the right has mean 0, and standard deviation 1, while the other does not.  This should hammer home the point that when we When we convert distributions to Z scores, we are merely re-representing it in a normalized form so that we can compare two distributions with different means and standard deviations.
+What you see above is that the distributions are the same (the breaks are a little different, apologies) *except* for the scale.  The tomato on the right has mean 0, and standard deviation 1, while the other does not.  This should hammer home the point that when we When we convert distributions to Z scores, we are merely re-representing it in a normalized form so that we can compare two distributions with different means and standard deviations.
 
 ### What do the values mean in the context of brain imaging?
 A positive number means we are above the mean, and a negative number means that we are below the mean.  Zero indicates being equal to the mean.  This is incredibly important in the context of brain imaging - a negative value does not indicate any kind of "deactivation" or "inverse relationship," it just indicates that the original value in the map, before it was standardized, was below the mean.  We cannot say anything about the sign or original value itself, we can only infer about its relative place in the distribution.  
