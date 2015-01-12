@@ -1,0 +1,151 @@
+---
+title: "Introduction to Self Organizing Maps"
+author: "Vanessa Sochat"
+date: "08/28/2014"
+output: ioslides_presentation
+---
+
+## When to make one?
+Modern data is inherently highly dimensional.  For this reason, we have methods for “dimensionality reduction,” or reducing an N dimensional space to some smaller space, k, where k < N.  As an example, let’s look to brain imaging.  A single brain image is a 3D image, typically sized around 90 x 100 x 90.  Here is a silly little map that shows some functional activation (red) in auditory cortex:
+
+![brain image](acoustic.png)
+
+## When to make one?
+Let’s say that we have hundreds of these images, and we want to:
+
+- Understand how similar / different they are from one another
+- See them all at once in some simplified visualization 
+
+In this case, the self-organizing map can be an ideal strategy.  Why? It helps us to easily see how our training vectors (the brain images) are similar, and in this same light, could show us redundancy in the maps.  If we have some kind of meaningful label for our vectors, it will allow us to look for meaningful clustering.
+  
+## What exactly is a self-organizing map?
+I like to think of an SOM as an intuitive 2D space, or a grid of nodes, each of which is assigned to it one or more of the training vectors.  Distance in this lattice corresponds to similarity of your training vectors, so vectors assigned to the same node are highly similar, and on opposite sides of the lattice are most dissimilar.  It is “self-organizing” because it is an unsupervised method from machine learning – meaning that we can find interesting patterns in our data without needing any sort of a-priori defined label.
+
+##	How do I create a self-organizing map?
+As stated above, the SOM is a lattice of nodes, each of which is associated with a vector of weights of equal length to the training data.  To start, we initialize the weights to random values in the same space as the training data.  To go back to the brain imaging example, in this case, the training data are 3D brain images that have been flattened into vectors, and stacked on top of one another into a matrix with images in rows, voxels in columns.  A side note is that the images likely need to be resampled into a larger voxel size (from 90 x 100 x 90 to 45 x 50 x 45, for example) so the size of the matrix is computationally feasible to work with on our piddley laptops.
+
+## How do I create a self-organizing map?
+Training consists of choosing a vector at random from the training data, and matching it to the most similar (as determined by Euclidean distance) node in the lattice.  This node is called the Best Matching Unit (BMU), and the BMU’s local neighborhood is defined by way of an exponential decay function:
+				   			
+![decay function](eq1.png)
+                 
+where sigma at time zero is the width of the lattice at time t[zero], lambda is a time constant, and t is the iteration number.  This function ensures that the width of the neighborhood decreases over time, until it is equal to the size of the BMU to indicate that training is complete.  
+
+
+## How do I create a self-organizing map?
+For each iteration, the nodes that fall within this width of the BMU have their weights adjusted according to the following equation:
+
+![weights adjustment](eq2.png)
+
+where t again represents the iteration number of time set, and L is the learning rate to say that the weight of a node at the next time point is equal to the old weight plus a small percentage of the difference between the old weight and the input vector.  This procedure essentially makes the nodes defined within this shrinking neighborhood to be more similar to the matched training data.  The result is a grid where each brain image has been mapped to a 2D coordinate.  More notably, the vector of weights associated with each node has been influenced by both its matched training vectors as well as its local neighborhood, and be reshaped back into a 3D image.  
+
+##	How to REALLY create a SOM
+Thank goodness for R, we have packages for all of these things! You will want to use the “kohonen” package.  Let's give that a try 
+
+```{r}
+library(kohonen)
+data(mtcars)
+```
+
+##  How to REALLY create a SOM
+Here we have the standard mtcars data, that shows a bunch of random attributes about cars. First let's build the som.  mtcars needs to first be a matrix.  And if we don't resample our data during training, our grid must have fewer nodes (30) than training samples (32):
+
+```{r}
+data = as.matrix(mtcars)
+som = som(data, grid = somgrid(5, 6, "hexagonal"))
+summary(som)
+```
+
+##  How to plot the SOM
+The plot function works well for a small number of features.  Each node is like a "meta" car, and we can classify cars by figuring out which node in the space they match closest to. 
+
+```{r, echo=FALSE}
+plot(som)
+```
+
+##  Get comfortable with the SOM object
+If you do this with highly dimensional data, it looks terrible.  So let's look at this som object and find where "the important stuff" is!  Here we have the coordinates of the grid itself:
+
+```{r}
+head(som$grid$pts)
+```
+
+##  Get comfortable with the SOM object
+Here are the "nodes" - each is a feature vector of the same length as the training data.  You can think of these like "meta" cars.
+
+```{r}
+head(som$codes)
+```
+
+##  Get comfortable with the SOM object
+Here are the assignments of each training car (length 32) to nodes in the SOM.  This:
+```{r}
+som$unit.classif
+```
+is a row vector with one value per node, with the number being the row index in data that is most similar to it.  To get the node coordinates, again you want to look here:
+```{r echo=FALSE}
+som$grid$pts
+```
+
+##  How to plot the SOM
+You should explore the rest of the SOM object, however those are the fields I find most useful to know. Now let's talk about how to do our own SOM plot, in the case of higher dimensional data.
+
+Let's plot the SOM centers as orange circles, and add text that corresponds to the car that was matched to each node.
+
+"pch" corresponds to the shape
+
+"cex" to the size
+
+```{r}
+assignedCars = som$unit.classif
+labels = rownames(data)[assignedCars]
+plot(som$grid$pts,main="SOM Car Lattice", 
+     col="orange",xlab="Nodes", 
+     ylab="Nodes",pch=19,cex=6)
+text(som$grid$pts,labels,cex=.6)
+```
+
+
+##  How to plot the SOM
+```{r echo=FALSE}
+labels = rownames(data)[som$unit.classif]
+plot(som$grid$pts,main="SOM Car Lattice", 
+     col="orange",xlab="Nodes", 
+     ylab="Nodes",pch=19,cex=6)
+text(som$grid$pts,labels,cex=.6)
+```
+
+## How to plot the SOM
+This isn't so useful.  Let's try something cooler - we will take a random car from our data, calculate the similarity to all nodes, and color based on that similarity.
+```{r}
+euc.dist <- function(x1, x2) sqrt(sum((x1 - x2) ^ 2))
+car = data[sample(seq(1,nrow(data)),1),]
+similarity = array(dim=length(car))
+for (r in 1:nrow(som$codes)){
+  similarity[r] = euc.dist(car,som$codes[r,])
+}
+```
+## How to plot the SOM
+We need a color palette! We will break our similarity values into ten color bins. Think about what is the range of the scores (which will depend on the metric you use). If you want to make comparisons between images with different ranges, you will need to add a constant min and max before mapping the color values (removed after you generate the range).
+```{r}
+library(RColorBrewer)
+rbPal <- colorRampPalette(brewer.pal(9,"YlOrRd"))
+color = rbPal(10)[as.numeric(cut(similarity,breaks = 10))]
+```
+Now let's instead color by the match score. This can help us to "visually classify" this car.
+
+## How to plot the SOM
+```{r}
+plot(som$grid$pts,main="SOM Car Lattice", 
+     col=color,xlab="Nodes", 
+     ylab="Nodes",pch=19,cex=10)
+text(som$grid$pts,labels,cex=.6)
+```
+
+## What can I do with the SOM?
+The SOM is primarily (in my opinion) best for visualization of complex data, and as we saw above, it can also be used like a classifier.  Why is this a cool method for imaging?  In the case of the brain imaging example, if you remember that each node is associated with a vector of weights that have been adjusted according to the matched training examples, we can reconstruct each vector of weights back into a 3D brain image that represents a “meta” brain image for the node.  A similar analogy would be to take the cluster centers of a K-means clustering as “meta” images or features.  
+
+## What can I do with the SOM?
+For example, the interactive SOMs here <http://vbmis.com/bmi/n2g/brainlattice/ASD.html> are created with 525 functional brain images, and a new brain image is mapped to it to “visually understand” the kinds of functional networks in the map.
+
+If you have any questions, please don’t hesitate to ask <vsochat@stanford.edu>.
